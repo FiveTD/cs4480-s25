@@ -1,4 +1,7 @@
-# Place your imports here
+# Simple HTTP proxy server
+# Written by Tim Lawrence for CS4480
+# Additional code provided by class resources
+
 import signal
 from optparse import OptionParser
 import sys
@@ -70,7 +73,8 @@ def request_server(host: bytes, port: int, path: bytes, headers: dict) -> bytes:
     with socket(AF_INET, SOCK_STREAM) as server_skt:
         server_skt.connect((host, port))
         
-        header_str = f"GET http://{host.decode()}{path.decode()} HTTP/1.0\r\n"
+        header_str = f"GET {path.decode()} HTTP/1.0\r\n"
+        headers[b'Host'] = host
         headers[b'Connection'] = b'close' # Override or add connection info to header
         for headkey, headval in headers.items():
             header_str += f"{headkey.decode()}: {headval.decode()}\r\n"
