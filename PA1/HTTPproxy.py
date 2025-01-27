@@ -18,8 +18,8 @@ class ParseError(Enum):
 def receive_request(client_skt: socket) -> bytes:
     '''Handles a client connection and receives an HTTP request.'''
     request: bytes = b''
-    # TODO: recv loop
-    request = client_skt.recv(2048)
+    while b'\r\n\r\n' not in request:
+        request += client_skt.recv(2048)
     return request
 
 def parse_request(message: bytes) -> tuple[ParseError, bytes, int, bytes, dict[bytes, bytes]]:
@@ -27,19 +27,16 @@ def parse_request(message: bytes) -> tuple[ParseError, bytes, int, bytes, dict[b
     Returns a ParseError if the request is malformed or can't be processed.'''
     host, port, path, headers = None, None, None, None
 
-    logging.debug('start parse')
     try:
         # Parse header into basic tokens
         message_tokens = message.split(maxsplit=3)
         assert len(message_tokens) >= 3
-        logging.debug('correct length')
 
         # Check method
         method = message_tokens[0]
         assert method in [b'GET', b'HEAD', b'OPTIONS', b'TRACE', b'PUT', b'DELETE', b'POST', b'PATCH', b'CONNECT']
         if method != b'GET':
             return ParseError.NOTIMPL, None, None, None, None
-        logging.debug('correct method')
         
         # Parse URL
         url = message_tokens[1]
@@ -63,10 +60,8 @@ def parse_request(message: bytes) -> tuple[ParseError, bytes, int, bytes, dict[b
                 headers[mh_key] = mh_value
 
     except AssertionError:
-        logging.debug('fail parse')
         return ParseError.BADREQ, None, None, None, None
     else:
-        logging.debug('end parse')
         return None, host, port, path, headers
 
 def request_server(host: bytes, port: int, path: bytes, headers: dict) -> bytes:
@@ -78,12 +73,15 @@ def request_server(host: bytes, port: int, path: bytes, headers: dict) -> bytes:
         header_str = f"GET http://{host.decode()}{path.decode()} HTTP/1.0\r\n"
         headers[b'Connection'] = b'close' # Override or add connection info to header
         for headkey, headval in headers.items():
-            header_str += f"{headkey}: {headval}\r\n"
+            header_str += f"{headkey.decode()}: {headval.decode()}\r\n"
         header_str += "\r\n"
+        logging.debug(header_str)
+        logging.debug(header_str.encode())
         server_skt.send(header_str.encode())
 
-        # TODO: recv loop
-        response = server_skt.recv(2048)
+        response = b''
+        while chunk := server_skt.recv(2048): # Returns None on connection close and breaks loop
+            response += chunk
         return response
     
 def send_client_response(client_skt: socket, response: bytes):
