@@ -123,8 +123,10 @@ def main():
     parser.add_option('-l', type='string', dest='loggingLevel')
     (options, args) = parser.parse_args()
 
-    # Set logging level 
-    loggingLevel: str = options.loggingLevel.lower()
+    # Set logging level
+    loggingLevel: str = options.loggingLevel
+    if loggingLevel is None: loggingLevel = 'ERROR'
+    loggingLevel = loggingLevel.lower()
     if loggingLevel == 'info':
         logging.basicConfig(level=logging.INFO)
     elif loggingLevel == 'debug':
