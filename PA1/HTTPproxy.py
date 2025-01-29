@@ -9,6 +9,9 @@ from socket import *
 import logging
 from enum import Enum
 import re
+import threading
+
+MAX_THREADS: int = 100
 
 # Signal handler for pressing ctrl-c
 def ctrl_c_pressed(signal, frame):
@@ -95,9 +98,21 @@ def send_client_response(client_skt: socket, response: bytes):
 
 def send_client_error(client_skt: socket, errormsg: str):
     '''Sends an error to the client if their request could not be processed.'''
+    logging.info(f"Error on client {client_skt.getsockname()}: {errormsg}")
     error_header = f"HTTP/1.0 {errormsg}\r\n\r\n"
     client_skt.send(error_header.encode())
     client_skt.close()
+
+def handle_client(client_skt: socket):
+    message = receive_request(client_skt)
+    error, host, port, path, headers = parse_request(message)
+    if not error:
+        response = request_server(host, port, path, headers)
+        send_client_response(client_skt, response)
+    elif error == ParseError.BADREQ:
+        send_client_error(client_skt, "400 Bad Request")
+    elif error == ParseError.NOTIMPL:
+        send_client_error(client_skt, "501 Not Implemented")
 
 # Start of program execution
 def main():
@@ -105,7 +120,17 @@ def main():
     parser = OptionParser()
     parser.add_option('-p', type='int', dest='serverPort')
     parser.add_option('-a', type='string', dest='serverAddress')
+    parser.add_option('-l', type='string', dest='loggingLevel')
     (options, args) = parser.parse_args()
+
+    # Set logging level 
+    loggingLevel: str = options.loggingLevel.lower()
+    if loggingLevel == 'info':
+        logging.basicConfig(level=logging.INFO)
+    elif loggingLevel == 'debug':
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.ERROR)
 
     port = options.serverPort
     address = options.serverAddress
@@ -122,21 +147,18 @@ def main():
     listener_skt.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1) # Make the autograder behave
     listener_skt.bind((address, port))
     listener_skt.listen()
+    logging.info("Accepting clients...")
 
     # Accept client sockets and handle requests
     while True:
         client_skt, client_address = listener_skt.accept()
-        message = receive_request(client_skt)
-        error, host, port, path, headers = parse_request(message)
-        if not error:
-            response = request_server(host, port, path, headers)
-            send_client_response(client_skt, response)
-        elif error == ParseError.BADREQ:
-            send_client_error(client_skt, "400 Bad Request")
-        elif error == ParseError.NOTIMPL:
-            send_client_error(client_skt, "501 Not Implemented")
-
-# Set logging level
-logging.basicConfig(level=logging.ERROR)        
+        if threading.active_count() > MAX_THREADS:
+            logging.info(f"Rejected client {client_skt.getsockname()}: too many threads")
+            send_client_error(client_skt, "503 Service Unavailable")
+        
+        logging.info(f"Accepted client {client_skt.getsockname()}")
+        client_thread = threading.Thread(target=handle_client, args=[client_skt])
+        client_thread.start()
+       
 if __name__ == '__main__':
     main()
