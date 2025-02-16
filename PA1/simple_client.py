@@ -1,7 +1,5 @@
-from socket import *
+#!/usr/bin/env python3
 
-sock = socket(AF_INET, SOCK_STREAM)
-sock.connect(('localhost', 2100))
-sock.sendall(b'GET http://www.flux.utah.edu/cs4480/simple.html HTTP/1.0\r\n\r\n')
+import simple_request
 
-print(sock.makefile('rb').read())
+simple_request.send(b'GET http://www.flux.utah.edu/cs4480/simple.html HTTP/1.0\r\n\r\n')

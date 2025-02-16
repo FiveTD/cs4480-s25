@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from socket import *
 
 sock = socket(AF_INET, SOCK_STREAM)
