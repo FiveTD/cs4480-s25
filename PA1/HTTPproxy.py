@@ -23,8 +23,8 @@ cacheEnabled: bool = False
 requestBlocklist: set[bytes] = set()
 blocklistEnabled: bool = False
 
-# Signal handler for pressing ctrl-c
 def ctrl_c_pressed(signal, frame):
+    '''Signal handler for pressing ctrl-c'''
     sys.exit(0)
 
 class ParseError(Enum):
@@ -63,7 +63,7 @@ def parse_request(message: bytes) -> tuple[ParseError, bytes, int, bytes, dict[b
         host = url_match[1]
         port = int(url_match[2]) if url_match[2] else 80
         path = url_match[3]
-        if blocklistEnabled and host in requestBlocklist:
+        if host_blocked(host):
             return ParseError.FORBID, None, None, None, None
         # logging.debug("Parsed URL")
 
@@ -102,7 +102,7 @@ def parse_settings(path: bytes) -> bool:
     elif path.startswith(b'/proxy/blocklist/add/'): 
         blockedHost = path.removeprefix(b'/proxy/blocklist/add/')
         add_to_blocklist(blockedHost)
-    elif path.startswith(b'/proxy/blocklist/remove'):
+    elif path.startswith(b'/proxy/blocklist/remove/'):
         blockedHost = path.removeprefix(b'/proxy/blocklist/remove/')
         remove_from_blocklist(blockedHost)
     else: return False
@@ -124,11 +124,14 @@ def request_server(host: bytes, port: int, path: bytes, headers: dict[bytes, byt
         header_str += f"{headkey.decode()}: {headval.decode()}\r\n"
     header_str += "\r\n"
     # logging.debug(header_str)
-    # logging.debug(header_str.encode())
     
     # Connect to server and receive response
-    with socket(AF_INET, SOCK_STREAM) as server_skt:    
-        server_skt.connect((host, port))
+    with socket(AF_INET, SOCK_STREAM) as server_skt:
+        try:
+            server_skt.connect((host, port))
+        except:
+            logging.info(f"Unable to connect to {host.decode()}:{port}")
+            return status_code_response("500 Internal Server Error")
         server_skt.send(header_str.encode())
 
         response = b''
@@ -148,11 +151,9 @@ def send_client_response(client_skt: socket, response: bytes) -> None:
     client_skt.send(response)
     client_skt.close()
 
-def send_client_response_code(client_skt: socket, response: str) -> None:
+def status_code_response(responseMsg: str) -> None:
     '''Constructs a client response with the provided response code and message.'''
-    logging.info(f"Message on client {client_skt.getsockname()}: {response}")
-    response_header = f"HTTP/1.0 {response}\r\n\r\n"
-    send_client_response(client_skt, response_header.encode())
+    return f"HTTP/1.0 {responseMsg}\r\n\r\n".encode()
 
 def get_cache_key(host: bytes, port: int, path: bytes) -> bytes:
     return host + b':' + bytes(port) + path
@@ -168,17 +169,25 @@ def fetch_from_cache(host: bytes, port: int, path: bytes) -> bytes | None:
     return responseCache.get(key, None)
 
 def add_to_cache(host: bytes, port: int, path: bytes, obj: bytes) -> None:
-    logging.debug(f"Adding {host.decode()} to cache")
+    logging.info(f"Adding {host.decode()} to cache")
     key = get_cache_key(host, port, path)
     responseCache[key] = obj
     
 def add_to_blocklist(host: bytes) -> None:
-    if not blocklistEnabled: return
+    logging.info(f"Adding {host.decode()} to blocklist")
+    host = host.split(b':')[0] # Remove port from host if present
     requestBlocklist.add(host)
     
 def remove_from_blocklist(host: bytes) -> None:
-    if not blocklistEnabled: return
+    logging.debug(f"Removing {host.decode()} from blocklist")
     requestBlocklist.remove(host)
+    
+def host_blocked(host: bytes) -> bool:
+    '''Checks if the host is currently blocked.'''
+    if not blocklistEnabled: return False
+    for blockedHost in requestBlocklist:
+        if blockedHost in host: return True
+    return False
 
 def handle_client(client_skt: socket) -> None:
     '''Manage a request from a single client.'''
@@ -186,12 +195,12 @@ def handle_client(client_skt: socket) -> None:
     error, host, port, path, headers = parse_request(message)
     if not error:
         if parse_settings(path):
-            send_client_response_code(client_skt, "200 OK")
+            response = status_code_response("200 OK")
         else:
             response = request_server(host, port, path, headers)
-            send_client_response(client_skt, response)
     else:
-        send_client_response_code(client_skt, error.value)
+        response = status_code_response(error.value)
+    send_client_response(client_skt, response)
 
 # Start of program execution
 def main():
@@ -235,7 +244,7 @@ def main():
         client_skt, client_address = listener_skt.accept()
         if threading.active_count() > MAX_THREADS:
             logging.info(f"Rejected client {client_skt.getsockname()}: too many threads")
-            send_client_response_code(client_skt, "503 Service Unavailable")
+            send_client_response(client_skt, status_code_response("503 Service Unavailable"))
         
         logging.info(f"Accepted client {client_skt.getsockname()}")
         client_thread = threading.Thread(target=handle_client, args=[client_skt])
