@@ -33,7 +33,7 @@ class ParseError(Enum):
     FORBID = "403 Forbidden"
 
 def receive_request(client_skt: socket) -> bytes:
-    '''Handles a client connection and receives an HTTP request.'''
+    '''Receives a complete HTTP request from ``client_skt``.'''
     request: bytes = b''
     while b'\r\n\r\n' not in request:
         request += client_skt.recv(2048)
@@ -41,7 +41,7 @@ def receive_request(client_skt: socket) -> bytes:
 
 def parse_request(message: bytes) -> tuple[ParseError, bytes, int, bytes, dict[bytes, bytes]]:
     '''Parses a received HTTP request and extracts host, port, path, and headers.
-    Returns a ParseError if the request is malformed or can't be processed.'''
+    Returns a ``ParseError`` if the request is malformed or can't be processed.'''
     host, port, path, headers = None, None, None, None
 
     try:
@@ -90,7 +90,7 @@ def parse_request(message: bytes) -> tuple[ParseError, bytes, int, bytes, dict[b
     
 def parse_settings(path: bytes) -> bool:
     '''Parses proxy settings request from the request path.
-    Returns True if settings were modified.'''
+    Returns ``True`` if settings were modified.'''
     global cacheEnabled, blocklistEnabled
     
     if path == b'/proxy/cache/enable': cacheEnabled = True
@@ -106,16 +106,16 @@ def parse_settings(path: bytes) -> bool:
         blockedHost = path.removeprefix(b'/proxy/blocklist/remove/')
         remove_from_blocklist(blockedHost)
     else: return False
+    logging.info(f"Settings updated: {path.decode()}")
     return True
 
 def request_server(host: bytes, port: int, path: bytes, headers: dict[bytes, bytes]) -> bytes:
-    '''Reconstructs and passes an HTTP GET request to the intended host.
-    If cache is enabled, makes a conditional GET request and returns the cached value when appropriate.
-    Closes connection after receipt.'''
-    # Construct GET headers
+    '''Fetches the requested resource from the server.
+    If caching is enabled, reads from and updates cache appropriately.'''
+    # Construct headers
     headers[b'Host'] = host
-    headers[b'Connection'] = b'close' # Override or add connection info to header
-    if cacheEnabled and (cached_obj := fetch_from_cache(host, port, path)):
+    headers[b'Connection'] = b'close'
+    if cached_obj := fetch_from_cache(host, port, path):
         headers[b'If-Modified-Since'] = get_modified_date()
     
     # Construct GET header string
@@ -131,7 +131,7 @@ def request_server(host: bytes, port: int, path: bytes, headers: dict[bytes, byt
             server_skt.connect((host, port))
         except:
             logging.info(f"Unable to connect to {host.decode()}:{port}")
-            return status_code_response("500 Internal Server Error")
+            return status_code_response(ParseError.BADREQ.value)
         server_skt.send(header_str.encode())
 
         response = b''
@@ -159,38 +159,43 @@ def get_cache_key(host: bytes, port: int, path: bytes) -> bytes:
     return host + b':' + bytes(port) + path
 
 def get_modified_date() -> bytes:
-    '''Gets the current time as HTTP-date (RFC 1945, 3.3).'''
+    '''Gets the current time as HTTP-date
+    ([RFC 1945, 3.3](https://www.rfc-editor.org/rfc/rfc1945#section-3.3)).'''
     return format_date_time(time.time()).encode()
 
 def fetch_from_cache(host: bytes, port: int, path: bytes) -> bytes | None:
-    '''If the resource is cached, returns the obj. If not, returns None.'''
+    '''If the resource is cached and caching is enabled, returns the cached resource. If not, returns ``None``.'''
+    if not cacheEnabled: return None
     logging.debug(f"Fetching from cache")
     key = get_cache_key(host, port, path)
     return responseCache.get(key, None)
 
 def add_to_cache(host: bytes, port: int, path: bytes, obj: bytes) -> None:
-    logging.info(f"Adding {host.decode()} to cache")
+    '''Caches the resouce at ``host``:``port``/``path``.'''
+    logging.info(f"Adding {host.decode()}:{port}{path.decode()} to cache")
     key = get_cache_key(host, port, path)
     responseCache[key] = obj
     
 def add_to_blocklist(host: bytes) -> None:
+    '''Adds ``host`` to the blocklist.'''
     logging.info(f"Adding {host.decode()} to blocklist")
     host = host.split(b':')[0] # Remove port from host if present
     requestBlocklist.add(host)
     
 def remove_from_blocklist(host: bytes) -> None:
+    '''Removes ``host`` from the blocklist.'''
     logging.debug(f"Removing {host.decode()} from blocklist")
     requestBlocklist.remove(host)
     
 def host_blocked(host: bytes) -> bool:
-    '''Checks if the host is currently blocked.'''
+    '''Checks if ``host`` is currently blocked.'''
     if not blocklistEnabled: return False
     for blockedHost in requestBlocklist:
         if blockedHost in host: return True
     return False
 
 def handle_client(client_skt: socket) -> None:
-    '''Manage a request from a single client.'''
+    '''Manages a request from a single client.'''
     message = receive_request(client_skt)
     error, host, port, path, headers = parse_request(message)
     if not error:
@@ -202,7 +207,6 @@ def handle_client(client_skt: socket) -> None:
         response = status_code_response(error.value)
     send_client_response(client_skt, response)
 
-# Start of program execution
 def main():
     # Parse out the command line server address and port number to listen to
     parser = OptionParser()
