@@ -1,3 +1,3 @@
 #!/usr/bin/python3
 
-#TODO: all of it
+#TODO: Test fetching in VM
