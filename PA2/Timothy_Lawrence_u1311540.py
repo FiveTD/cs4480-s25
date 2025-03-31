@@ -16,6 +16,10 @@ SERVER_MACS = [
     EthAddr("00:00:00:00:00:05"),
     EthAddr("00:00:00:00:00:06")
 ]
+SERVER_PORTS = [
+    5,
+    6
+]
 
 class VirtualLoadBalancer:
     def __init__(self):
@@ -59,19 +63,15 @@ class VirtualLoadBalancer:
             log.warning("Ignoring non-ARP request packet")
             return
         
-        # Get client IP and assign server IP/MAC round-robin
+        # Get client IP/Port and assign server round-robin
         clientIP = arpPkt.protosrc
+        clientPort = event.port
         serverIP = SERVER_IPS[self.serverIndex]
         serverMAC = SERVER_MACS[self.serverIndex]
+        serverPort = SERVER_PORTS[self.serverIndex]
         self.serverIndex = (self.serverIndex + 1) % len(SERVER_IPS)
+        
         log.info(f"Redirecting {clientIP} to {serverIP}")
-        
-        clientPort = event.port
-        serverPort = self.mac_ports.get(serverMAC)
-        if serverPort is None:
-            log.warning(f"Server MAC {serverMAC} not found in ports")
-            return
-        
         self._set_flow_rules(clientIP, serverIP, clientPort, serverPort)
         self._send_arp_reply(arpPkt, serverMAC, clientPort)
         
