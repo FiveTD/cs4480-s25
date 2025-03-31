@@ -28,6 +28,7 @@ class VirtualLoadBalancer:
     
     def _handle_PacketIn(self, event):
         '''Handle incoming packets and process ARP requests.'''
+        log.debug("PacketIn event received")
         packet = event.parsed
         if not packet.parsed:
             log.warning("Ignoring incomplete packet")
@@ -57,6 +58,8 @@ class VirtualLoadBalancer:
         
     def _set_flow_rules(self, clientIP, serverIP, event):
         '''Set flow rules for ICMP packets from `clientIP` to `serverIP` (and vice-versa).'''
+        log.debug(f"Setting flow rules for {clientIP} to {serverIP}")
+        
         # Match ICMP packets from client to server
         clientMsg = of.ofp_flow_mod()
         clientMsg.match.dl_type = pkt.ethernet.IP_TYPE
@@ -69,12 +72,14 @@ class VirtualLoadBalancer:
         clientMsg.actions.append(of.ofp_action_output(port=event.port))
         self.connection.send(clientMsg)
         
+        log.debug(f"Setting flow rules for {serverIP} to {clientIP}")
+        
         # Match ICMP packets from server to client
         serverMsg = of.ofp_flow_mod()
         serverMsg.match.dl_type = pkt.ethernet.IP_TYPE
         serverMsg.match.nw_proto = pkt.ipv4.ICMP_PROTOCOL
         serverMsg.match.nw_src = serverIP
-        serverMsg.match.nw_dst = SWITCH_IP
+        serverMsg.match.nw_dst = clientIP
         
         # Rewrite source IP to switch (so client perceives switch as server)
         serverMsg.actions.append(of.ofp_action_nw_addr.set_src(SWITCH_IP))
@@ -83,6 +88,8 @@ class VirtualLoadBalancer:
     
     def _send_arp_reply(self, arpPkt, event):
         '''Send ARP reply to the client.'''
+        log.info("Sending ARP reply")
+        
         # Setup reply
         arpReply = pkt.arp()
         arpReply.hwtype = arpPkt.hwtype
