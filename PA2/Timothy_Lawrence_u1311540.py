@@ -3,10 +3,6 @@
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 import pox.lib.packet as pkt
-from pox.lib.addresses import EthAddr, IPAddr
-import pox.lib.util as poxutil
-import pox.lib.revent as revent
-import pox.lib.recoco as recoco
 
 log = core.getLogger()
 
@@ -14,12 +10,21 @@ SWITCH_IP = '10.0.0.10'
 SERVER_IPS = ['10.0.0.5', '10.0.0.6']
 
 class VirtualLoadBalancer:
-    def __init__(self, connection):
-        self.connection = connection
+    def __init__(self):
         self.serverIndex = 0
+        self.connection = None # Set in _handle_ConnectionUp
         
-        connection.addListeners(self)
+        core.openflow.addListenerByName("ConnectionUp", self._handle_ConnectionUp)
+        core.openflow.addListenerByName("PacketIn", self._handle_PacketIn)
+        core.run()
         
+        log.info("Load balancer started")
+    
+    def _handle_ConnectionUp(self, event):
+        '''Establish connection with the switch.'''
+        self.connection = core.openflow.getConnection(event.dpid)
+        log.info(f"Connection established with switch {event.dpid}")
+    
     def _handle_PacketIn(self, event):
         '''Handle incoming packets and process ARP requests.'''
         packet = event.parsed
@@ -40,13 +45,17 @@ class VirtualLoadBalancer:
             log.warning("Ignoring non-ARP request packet")
             return
         
-        # Assign server IP to client round-robin
+        # Get client IP and assign server IP round-robin
         clientIP = arpPkt.protosrc
         serverIP = SERVER_IPS[self.serverIndex]
         self.serverIndex = (self.serverIndex + 1) % len(SERVER_IPS)
         log.info(f"Connecting {clientIP} to {serverIP}")
         
-        # === Set flow rules for ICMP packets ===
+        self._set_flow_rules(clientIP, serverIP, event)
+        self._send_arp_reply(arpPkt, event)
+        
+    def _set_flow_rules(self, clientIP, serverIP, event):
+        '''Set flow rules for ICMP packets from `clientIP` to `serverIP` (and vice-versa).'''
         # Match ICMP packets from client to server
         clientMsg = of.ofp_flow_mod()
         clientMsg.match.dl_type = pkt.ethernet.IP_TYPE
@@ -70,8 +79,9 @@ class VirtualLoadBalancer:
         serverMsg.actions.append(of.ofp_action_nw_addr.set_src(SWITCH_IP))
         serverMsg.actions.append(of.ofp_action_output(port=event.port))
         self.connection.send(serverMsg)
-        
-        # === Send ARP reply ===
+    
+    def _send_arp_reply(self, arpPkt, event):
+        '''Send ARP reply to the client.'''
         # Setup reply
         arpReply = pkt.arp()
         arpReply.hwsrc = "AA:BB:CC:DD:EE:FF" # Dummy MAC
@@ -92,11 +102,7 @@ class VirtualLoadBalancer:
         clientMsg.data = ethFrame.pack()
         clientMsg.actions.append(of.ofp_action_output(port=event.port))
         self.connection.send(clientMsg)
-        
-
-def start_load_balancer(event):
-    log.info("Starting load balancer")
-    VirtualLoadBalancer(event.connection)
     
 def launch():
-    core.addListenerByName("ConnectionUp", start_load_balancer)
+    log.info("Starting load balancer")
+    VirtualLoadBalancer()
