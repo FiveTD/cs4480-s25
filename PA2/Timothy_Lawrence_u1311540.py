@@ -40,7 +40,7 @@ class VirtualLoadBalancer:
     
     def _handle_arp(self, packet, event):
         '''Handle ARP packets and set up flow rules for ICMP traffic.'''
-        log.info("Handling packet")
+        log.debug("Handling packet")
         
         arpPkt = packet.find('arp')
         if not arpPkt or arpPkt.opcode != pkt.arp.REQUEST:
@@ -88,7 +88,7 @@ class VirtualLoadBalancer:
     
     def _send_arp_reply(self, arpPkt, event):
         '''Send ARP reply to the client.'''
-        log.info("Sending ARP reply")
+        log.debug("Sending ARP reply")
         
         # Setup reply
         arpReply = pkt.arp()
