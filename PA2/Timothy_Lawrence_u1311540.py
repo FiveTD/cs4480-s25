@@ -25,7 +25,6 @@ class VirtualLoadBalancer:
     def __init__(self):
         self.serverIndex = 0
         self.connection = None # Set in _handle_ConnectionUp
-        self.mac_ports = {} # Maps MAC addresses to ports
         
         core.openflow.addListenerByName("ConnectionUp", self._handle_ConnectionUp)
         core.openflow.addListenerByName("PacketIn", self._handle_PacketIn)
@@ -46,8 +45,6 @@ class VirtualLoadBalancer:
         
         log.debug(f"PacketIn event received from {packet.src}")
         
-        self.mac_ports[packet.src] = event.port
-        
         if packet.type == packet.ARP_TYPE:
             self._handle_arp(packet, event)
         elif packet.type == packet.IP_TYPE:
@@ -63,17 +60,26 @@ class VirtualLoadBalancer:
             log.warning("Ignoring non-ARP request packet")
             return
         
-        # Get client IP/Port and assign server round-robin
-        clientIP = arpPkt.protosrc
-        clientPort = event.port
-        serverIP = SERVER_IPS[self.serverIndex]
-        serverMAC = SERVER_MACS[self.serverIndex]
-        serverPort = SERVER_PORTS[self.serverIndex]
-        self.serverIndex = (self.serverIndex + 1) % len(SERVER_IPS)
-        
-        log.info(f"Redirecting {clientIP} to {serverIP}")
-        self._set_flow_rules(clientIP, serverIP, clientPort, serverPort)
-        self._send_arp_reply(arpPkt, serverMAC, clientPort)
+        if arpPkt.protodst == SWITCH_IP:
+            log.debug("Handling ARP request from client")
+            
+            # Get client IP/Port and assign server round-robin
+            clientIP = arpPkt.protosrc
+            clientPort = event.port
+            serverIP = SERVER_IPS[self.serverIndex]
+            serverMAC = SERVER_MACS[self.serverIndex]
+            serverPort = SERVER_PORTS[self.serverIndex]
+            self.serverIndex = (self.serverIndex + 1) % len(SERVER_IPS)
+            
+            log.info(f"Redirecting {clientIP} to {serverIP}")
+            self._set_flow_rules(clientIP, serverIP, clientPort, serverPort)
+            self._send_client_arp_reply(arpPkt, serverMAC, clientPort)
+        if arpPkt.protosrc in SERVER_IPS:
+            log.debug("Handling ARP request from server")
+            
+            # Send ARP reply
+            self._send_server_arp_reply(arpPkt, serverPort)
+            
         
     def _set_flow_rules(self, clientIP, serverIP, clientPort, serverPort):
         '''Set flow rules for ICMP packets from `clientIP` to `serverIP` (and vice-versa).'''
@@ -105,9 +111,9 @@ class VirtualLoadBalancer:
         serverMsg.actions.append(of.ofp_action_output(port=clientPort))
         self.connection.send(serverMsg)
     
-    def _send_arp_reply(self, arpPkt, serverMAC, clientPort):
+    def _send_client_arp_reply(self, arpPkt, serverMAC, clientPort):
         '''Send ARP reply to the client.'''
-        log.debug("Sending ARP reply")
+        log.debug("Sending ARP reply to client")
         
         # Setup reply
         arpReply = pkt.arp()
@@ -133,6 +139,35 @@ class VirtualLoadBalancer:
         clientMsg.data = ethFrame.pack()
         clientMsg.actions.append(of.ofp_action_output(port=clientPort))
         self.connection.send(clientMsg)
+        
+    def _send_server_arp_reply(self, arpPkt, serverPort):
+        '''Send ARP reply to the server.'''
+        log.debug("Sending ARP reply to server")
+        
+        # Setup reply
+        arpReply = pkt.arp()
+        arpReply.hwtype = arpPkt.hwtype
+        arpReply.prototype = arpPkt.prototype
+        arpReply.hwlen = arpPkt.hwlen
+        arpReply.protolen = arpPkt.protolen
+        arpReply.opcode = pkt.arp.REPLY
+        arpReply.hwsrc = arpPkt.hwdst
+        arpReply.hwdst = arpPkt.hwsrc
+        arpReply.protosrc = arpPkt.protodst
+        arpReply.protodst = arpPkt.protosrc
+        
+        # Setup ethernet frame
+        ethFrame = pkt.ethernet()
+        ethFrame.src = arpReply.hwsrc
+        ethFrame.dst = arpPkt.hwsrc
+        ethFrame.type = pkt.ethernet.ARP_TYPE
+        ethFrame.set_payload(arpReply)
+        
+        # Send the ARP reply
+        serverMsg = of.ofp_packet_out()
+        serverMsg.data = ethFrame.pack()
+        serverMsg.actions.append(of.ofp_action_output(port=serverPort))
+        self.connection.send(serverMsg)
     
 def launch():
     log.info("Starting load balancer")
