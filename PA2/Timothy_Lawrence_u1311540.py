@@ -25,6 +25,7 @@ class VirtualLoadBalancer:
     def __init__(self):
         self.serverIndex = 0
         self.connection = None # Set in _handle_ConnectionUp
+        self.mac_table = {} # MAC address table for ARP requests
         
         core.openflow.addListenerByName("ConnectionUp", self._handle_ConnectionUp)
         core.openflow.addListenerByName("PacketIn", self._handle_PacketIn)
@@ -71,18 +72,27 @@ class VirtualLoadBalancer:
             serverPort = SERVER_PORTS[self.serverIndex]
             self.serverIndex = (self.serverIndex + 1) % len(SERVER_IPS)
             
-            log.info(f"Redirecting {clientIP} to {serverIP}")
+            # Store MAC address for ARP reply
+            self.mac_table[clientIP] = arpPkt.hwsrc
+            
             self._set_flow_rules(clientIP, serverIP, clientPort, serverPort)
             self._send_client_arp_reply(arpPkt, serverMAC, clientPort)
         if arpPkt.protosrc in SERVER_IPS:
             log.debug("Handling ARP request from server")
             
+            clientMAC = self.mac_table.get(arpPkt.protodst)
+            if clientMAC is None:
+                log.warning("Client MAC address not found in table")
+                return
+            
             # Send ARP reply
-            self._send_server_arp_reply(arpPkt, serverPort)
+            self._send_server_arp_reply(arpPkt, clientMAC, serverPort)
             
         
     def _set_flow_rules(self, clientIP, serverIP, clientPort, serverPort):
         '''Set flow rules for ICMP packets from `clientIP` to `serverIP` (and vice-versa).'''
+        log.info(f"Redirecting {clientIP} to {serverIP}")
+        
         log.debug(f"Setting flow rules for {clientIP} to {serverIP}")
         
         # Match ICMP packets from client to server
