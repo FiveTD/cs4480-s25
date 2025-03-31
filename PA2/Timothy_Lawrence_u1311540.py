@@ -1,5 +1,10 @@
 #!/usr/bin/python3
 
+# Simple load balancing switch that maps a virtual IP address to multiple real server IP addresses 
+# using round-robin load balancing. Handles ICMP traffic, using ARP requests to determing server mapping.
+# Implemented using Mininet, POX, and OpenFlow.
+# Written by Tim Lawrence for CS4480, Spring 2025
+
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 import pox.lib.packet as pkt
@@ -7,6 +12,7 @@ from pox.lib.addresses import IPAddr, EthAddr
 
 log = core.getLogger()
 
+# Hardcoded server configurations
 SWITCH_IP = IPAddr('10.0.0.10')
 SERVER_IPS = [
     IPAddr('10.0.0.5'),
@@ -22,11 +28,15 @@ SERVER_PORTS = [
 ]
 
 class VirtualLoadBalancer:
+    '''Implements a 'virtual IP load balancing switch'.
+    Maps a virtual IP address to multiple real server IP addresses, using round-robin load balancing.
+    OpenFlow flow rules are set based on incoming ARP requests.'''
     def __init__(self):
         self.serverIndex = 0
-        self.connection = None # Set in _handle_ConnectionUp
+        self.connection = None # Set when switch connects to the OpenFlow controller
         self.mac_table = {} # MAC address table for ARP requests
         
+        # Register event listeners
         core.openflow.addListenerByName("ConnectionUp", self._handle_ConnectionUp)
         core.openflow.addListenerByName("PacketIn", self._handle_PacketIn)
         
@@ -49,18 +59,19 @@ class VirtualLoadBalancer:
         if packet.type == packet.ARP_TYPE:
             self._handle_arp(packet, event)
         elif packet.type == packet.IP_TYPE:
-            log.debug("Caught IP packet not handled by flow rules")
-        # Ignore non-ARP packets
+            log.warning("Caught IP packet not handled by flow rules")
     
     def _handle_arp(self, packet, event):
         '''Handle ARP packets and set up flow rules for ICMP traffic.'''
         log.debug("Handling packet")
         
+        # Filter packet for ARP requests
         arpPkt = packet.find('arp')
         if not arpPkt or arpPkt.opcode != pkt.arp.REQUEST:
             log.warning("Ignoring non-ARP request packet")
             return
         
+        # Client request to server
         if arpPkt.protodst == SWITCH_IP:
             log.debug("Handling ARP request from client")
             
@@ -77,18 +88,20 @@ class VirtualLoadBalancer:
             
             self._set_flow_rules(clientIP, serverIP, clientPort, serverPort)
             self._send_client_arp_reply(arpPkt, serverMAC, clientPort)
+            
+        # Server request to client
         if arpPkt.protosrc in SERVER_IPS:
             log.debug("Handling ARP request from server")
             
+            # Get client MAC from previous request
             clientMAC = self.mac_table.get(arpPkt.protodst)
             if clientMAC is None:
                 log.warning("Client MAC address not found in table")
                 return
+            serverPort = event.port
             
-            # Send ARP reply
             self._send_server_arp_reply(arpPkt, clientMAC, serverPort)
             
-        
     def _set_flow_rules(self, clientIP, serverIP, clientPort, serverPort):
         '''Set flow rules for ICMP packets from `clientIP` to `serverIP` (and vice-versa).'''
         log.info(f"Redirecting {clientIP} to {serverIP}")
@@ -134,7 +147,7 @@ class VirtualLoadBalancer:
         arpReply.opcode = pkt.arp.REPLY
         arpReply.hwsrc = serverMAC
         arpReply.hwdst = arpPkt.hwsrc
-        arpReply.protosrc = SWITCH_IP
+        arpReply.protosrc = SWITCH_IP # Client perceives switch as server
         arpReply.protodst = arpPkt.protosrc
         
         # Setup ethernet frame
