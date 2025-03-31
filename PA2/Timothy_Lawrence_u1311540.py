@@ -9,7 +9,10 @@ log = core.getLogger()
 
 SWITCH_IP = IPAddr('10.0.0.10')
 SWITCH_MAC = EthAddr('AA:BB:CC:DD:EE:FF') # Dummy MAC
-SERVER_IPS = [IPAddr('10.0.0.5'), IPAddr('10.0.0.6')]
+SERVER_ADDRS = {
+    IPAddr('10.0.0.5'): EthAddr("00:00:00:00:00:05"),
+    IPAddr('10.0.0.6'): EthAddr("00:00:00:00:00:06")
+}
 
 class VirtualLoadBalancer:
     def __init__(self):
@@ -28,14 +31,17 @@ class VirtualLoadBalancer:
     
     def _handle_PacketIn(self, event):
         '''Handle incoming packets and process ARP requests.'''
-        log.debug("PacketIn event received")
         packet = event.parsed
         if not packet.parsed:
             log.warning("Ignoring incomplete packet")
             return
         
+        log.debug(f"PacketIn event received from {packet.src}")
+        
         if packet.type == packet.ARP_TYPE:
             self._handle_arp(packet, event)
+        elif packet.type == packet.IP_TYPE:
+            log.debug("Caught IP packet not handled by flow rules")
         # Ignore non-ARP packets
     
     def _handle_arp(self, packet, event):
@@ -49,12 +55,12 @@ class VirtualLoadBalancer:
         
         # Get client IP and assign server IP round-robin
         clientIP = arpPkt.protosrc
-        serverIP = SERVER_IPS[self.serverIndex]
-        self.serverIndex = (self.serverIndex + 1) % len(SERVER_IPS)
+        serverIP = SERVER_ADDRS.keys()[self.serverIndex]
+        self.serverIndex = (self.serverIndex + 1) % len(SERVER_ADDRS)
         log.info(f"Connecting {clientIP} to {serverIP}")
         
         self._set_flow_rules(clientIP, serverIP, event)
-        self._send_arp_reply(arpPkt, event)
+        self._send_arp_reply(arpPkt, serverIP, event)
         
     def _set_flow_rules(self, clientIP, serverIP, event):
         '''Set flow rules for ICMP packets from `clientIP` to `serverIP` (and vice-versa).'''
@@ -86,7 +92,7 @@ class VirtualLoadBalancer:
         serverMsg.actions.append(of.ofp_action_output(port=event.port))
         self.connection.send(serverMsg)
     
-    def _send_arp_reply(self, arpPkt, event):
+    def _send_arp_reply(self, arpPkt, serverIP, event):
         '''Send ARP reply to the client.'''
         log.debug("Sending ARP reply")
         
@@ -97,7 +103,7 @@ class VirtualLoadBalancer:
         arpReply.hwlen = arpPkt.hwlen
         arpReply.protolen = arpPkt.protolen
         arpReply.opcode = pkt.arp.REPLY
-        arpReply.hwsrc = SWITCH_MAC
+        arpReply.hwsrc = SERVER_ADDRS[serverIP]
         arpReply.hwdst = arpPkt.hwsrc
         arpReply.protosrc = SWITCH_IP
         arpReply.protodst = arpPkt.protosrc
