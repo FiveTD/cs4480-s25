@@ -21,6 +21,7 @@ class VirtualLoadBalancer:
     def __init__(self):
         self.serverIndex = 0
         self.connection = None # Set in _handle_ConnectionUp
+        self.mac_ports = {} # Maps MAC addresses to ports
         
         core.openflow.addListenerByName("ConnectionUp", self._handle_ConnectionUp)
         core.openflow.addListenerByName("PacketIn", self._handle_PacketIn)
@@ -40,6 +41,8 @@ class VirtualLoadBalancer:
             return
         
         log.debug(f"PacketIn event received from {packet.src}")
+        
+        self.mac_ports[packet.src] = event.port
         
         if packet.type == packet.ARP_TYPE:
             self._handle_arp(packet, event)
@@ -61,12 +64,18 @@ class VirtualLoadBalancer:
         serverIP = SERVER_IPS[self.serverIndex]
         serverMAC = SERVER_MACS[self.serverIndex]
         self.serverIndex = (self.serverIndex + 1) % len(SERVER_IPS)
-        log.info(f"Connecting {clientIP} to {serverIP}")
+        log.info(f"Redirecting {clientIP} to {serverIP}")
         
-        self._set_flow_rules(clientIP, serverIP, event)
-        self._send_arp_reply(arpPkt, serverMAC, event)
+        clientPort = event.port
+        serverPort = self.mac_ports.get(serverMAC)
+        if serverPort is None:
+            log.warning(f"Server MAC {serverMAC} not found in ports")
+            return
         
-    def _set_flow_rules(self, clientIP, serverIP, event):
+        self._set_flow_rules(clientIP, serverIP, clientPort, serverPort)
+        self._send_arp_reply(arpPkt, serverMAC, clientPort)
+        
+    def _set_flow_rules(self, clientIP, serverIP, clientPort, serverPort):
         '''Set flow rules for ICMP packets from `clientIP` to `serverIP` (and vice-versa).'''
         log.debug(f"Setting flow rules for {clientIP} to {serverIP}")
         
@@ -79,7 +88,7 @@ class VirtualLoadBalancer:
         
         # Redirect to the assigned server
         clientMsg.actions.append(of.ofp_action_nw_addr.set_dst(serverIP))
-        clientMsg.actions.append(of.ofp_action_output(port=event.port))
+        clientMsg.actions.append(of.ofp_action_output(port=serverPort))
         self.connection.send(clientMsg)
         
         log.debug(f"Setting flow rules for {serverIP} to {clientIP}")
@@ -93,10 +102,10 @@ class VirtualLoadBalancer:
         
         # Rewrite source IP to switch (so client perceives switch as server)
         serverMsg.actions.append(of.ofp_action_nw_addr.set_src(SWITCH_IP))
-        serverMsg.actions.append(of.ofp_action_output(port=event.port))
+        serverMsg.actions.append(of.ofp_action_output(port=clientPort))
         self.connection.send(serverMsg)
     
-    def _send_arp_reply(self, arpPkt, serverMAC, event):
+    def _send_arp_reply(self, arpPkt, serverMAC, clientPort):
         '''Send ARP reply to the client.'''
         log.debug("Sending ARP reply")
         
@@ -122,7 +131,7 @@ class VirtualLoadBalancer:
         # Send the ARP reply
         clientMsg = of.ofp_packet_out()
         clientMsg.data = ethFrame.pack()
-        clientMsg.actions.append(of.ofp_action_output(port=event.port))
+        clientMsg.actions.append(of.ofp_action_output(port=clientPort))
         self.connection.send(clientMsg)
     
 def launch():
