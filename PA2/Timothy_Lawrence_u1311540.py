@@ -18,7 +18,6 @@ class VirtualLoadBalancer:
         
         core.openflow.addListenerByName("ConnectionUp", self._handle_ConnectionUp)
         core.openflow.addListenerByName("PacketIn", self._handle_PacketIn)
-        core.run()
         
         log.info("Load balancer started")
     
@@ -75,7 +74,7 @@ class VirtualLoadBalancer:
         serverMsg.match.dl_type = pkt.ethernet.IP_TYPE
         serverMsg.match.nw_proto = pkt.ipv4.ICMP_PROTOCOL
         serverMsg.match.nw_src = serverIP
-        serverMsg.match.nw_dst = clientIP
+        serverMsg.match.nw_dst = SWITCH_IP
         
         # Rewrite source IP to switch (so client perceives switch as server)
         serverMsg.actions.append(of.ofp_action_nw_addr.set_src(SWITCH_IP))
