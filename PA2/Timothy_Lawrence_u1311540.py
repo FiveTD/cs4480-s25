@@ -8,11 +8,14 @@ from pox.lib.addresses import IPAddr, EthAddr
 log = core.getLogger()
 
 SWITCH_IP = IPAddr('10.0.0.10')
-SWITCH_MAC = EthAddr('AA:BB:CC:DD:EE:FF') # Dummy MAC
-SERVER_ADDRS = {
-    IPAddr('10.0.0.5'): EthAddr("00:00:00:00:00:05"),
-    IPAddr('10.0.0.6'): EthAddr("00:00:00:00:00:06")
-}
+SERVER_IPS = [
+    IPAddr('10.0.0.5'),
+    IPAddr('10.0.0.6')
+]
+SERVER_MACS = [
+    EthAddr("00:00:00:00:00:05"),
+    EthAddr("00:00:00:00:00:06")
+]
 
 class VirtualLoadBalancer:
     def __init__(self):
@@ -53,14 +56,15 @@ class VirtualLoadBalancer:
             log.warning("Ignoring non-ARP request packet")
             return
         
-        # Get client IP and assign server IP round-robin
+        # Get client IP and assign server IP/MAC round-robin
         clientIP = arpPkt.protosrc
-        serverIP = SERVER_ADDRS.keys()[self.serverIndex]
-        self.serverIndex = (self.serverIndex + 1) % len(SERVER_ADDRS)
+        serverIP = SERVER_IPS[self.serverIndex]
+        serverMAC = SERVER_MACS[self.serverIndex]
+        self.serverIndex = (self.serverIndex + 1) % len(SERVER_IPS)
         log.info(f"Connecting {clientIP} to {serverIP}")
         
         self._set_flow_rules(clientIP, serverIP, event)
-        self._send_arp_reply(arpPkt, serverIP, event)
+        self._send_arp_reply(arpPkt, serverMAC, event)
         
     def _set_flow_rules(self, clientIP, serverIP, event):
         '''Set flow rules for ICMP packets from `clientIP` to `serverIP` (and vice-versa).'''
@@ -92,7 +96,7 @@ class VirtualLoadBalancer:
         serverMsg.actions.append(of.ofp_action_output(port=event.port))
         self.connection.send(serverMsg)
     
-    def _send_arp_reply(self, arpPkt, serverIP, event):
+    def _send_arp_reply(self, arpPkt, serverMAC, event):
         '''Send ARP reply to the client.'''
         log.debug("Sending ARP reply")
         
@@ -103,7 +107,7 @@ class VirtualLoadBalancer:
         arpReply.hwlen = arpPkt.hwlen
         arpReply.protolen = arpPkt.protolen
         arpReply.opcode = pkt.arp.REPLY
-        arpReply.hwsrc = SERVER_ADDRS[serverIP]
+        arpReply.hwsrc = serverMAC
         arpReply.hwdst = arpPkt.hwsrc
         arpReply.protosrc = SWITCH_IP
         arpReply.protodst = arpPkt.protosrc
