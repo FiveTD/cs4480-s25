@@ -150,7 +150,7 @@ class VirtualLoadBalancer:
         clientMsg.actions.append(of.ofp_action_output(port=clientPort))
         self.connection.send(clientMsg)
         
-    def _send_server_arp_reply(self, arpPkt, serverPort):
+    def _send_server_arp_reply(self, arpPkt, clientMAC, serverPort):
         '''Send ARP reply to the server.'''
         log.debug("Sending ARP reply to server")
         
@@ -161,7 +161,7 @@ class VirtualLoadBalancer:
         arpReply.hwlen = arpPkt.hwlen
         arpReply.protolen = arpPkt.protolen
         arpReply.opcode = pkt.arp.REPLY
-        arpReply.hwsrc = arpPkt.hwdst
+        arpReply.hwsrc = clientMAC
         arpReply.hwdst = arpPkt.hwsrc
         arpReply.protosrc = arpPkt.protodst
         arpReply.protodst = arpPkt.protosrc
