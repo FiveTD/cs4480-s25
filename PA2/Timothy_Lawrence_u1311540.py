@@ -3,11 +3,13 @@
 from pox.core import core
 import pox.openflow.libopenflow_01 as of
 import pox.lib.packet as pkt
+from pox.lib.addresses import IPAddr, EthAddr
 
 log = core.getLogger()
 
-SWITCH_IP = '10.0.0.10'
-SERVER_IPS = ['10.0.0.5', '10.0.0.6']
+SWITCH_IP = IPAddr('10.0.0.10')
+SWITCH_MAC = EthAddr('AA:BB:CC:DD:EE:FF') # Dummy MAC
+SERVER_IPS = [IPAddr('10.0.0.5'), IPAddr('10.0.0.6')]
 
 class VirtualLoadBalancer:
     def __init__(self):
@@ -84,9 +86,13 @@ class VirtualLoadBalancer:
         '''Send ARP reply to the client.'''
         # Setup reply
         arpReply = pkt.arp()
-        arpReply.hwsrc = "AA:BB:CC:DD:EE:FF" # Dummy MAC
-        arpReply.hwdst = arpPkt.hwsrc
+        arpReply.hwtype = arpPkt.hwtype
+        arpReply.prototype = arpPkt.prototype
+        arpReply.hwlen = arpPkt.hwlen
+        arpReply.protolen = arpPkt.protolen
         arpReply.opcode = pkt.arp.REPLY
+        arpReply.hwsrc = SWITCH_MAC
+        arpReply.hwdst = arpPkt.hwsrc
         arpReply.protosrc = SWITCH_IP
         arpReply.protodst = arpPkt.protosrc
         
