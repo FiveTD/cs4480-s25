@@ -9,9 +9,52 @@ services:
     privileged: true
     networks:
       net14:
-        ipv4_address: 10.0.14.4
+        ipv4_address: 10.0.14.4 # to ha
+      net16_0:
+        ipv4_address: 10.0.16.1 # to r2
+      net16_4:
+        ipv4_address: 10.0.16.5 # to r4
+
+  r2:
+    build: .
+    stdin_open: true
+    tty: true
+    cap_add:
+      - ALL
+    privileged: true
+    networks:
+      net16_0:
+        ipv4_address: 10.0.16.2 # to r1
+      net16_8:
+        ipv4_address: 10.0.16.10 # to r3
+  
+  r3:
+    build: .
+    stdin_open: true
+    tty: true
+    cap_add:
+      - ALL
+    privileged: true
+    networks:
       net15:
-        ipv4_address: 10.0.15.4
+        ipv4_address: 10.0.15.4 # to hb
+      net16_8:
+        ipv4_address: 10.0.16.9 # to r2
+      net16_12:
+        ipv4_address: 10.0.16.13 # to r4
+
+  r4:
+    build: .
+    stdin_open: true
+    tty: true
+    cap_add:
+      - ALL
+    privileged: true
+    networks:
+      net16_4:
+        ipv4_address: 10.0.16.6 # to r1
+      net16_12:
+        ipv4_address: 10.0.16.14 # to r3
 
   ha:
     build: .
@@ -22,7 +65,7 @@ services:
     privileged: true    
     networks:
       net14:
-        ipv4_address: 10.0.14.3
+        ipv4_address: 10.0.14.3 # to r1
 
   hb:
     build: .
@@ -33,19 +76,39 @@ services:
     privileged: true    
     networks:
       net15:
-        ipv4_address: 10.0.15.3
+        ipv4_address: 10.0.15.3 # to r3
 
 networks:
-  net14:
+  net14: # ha-r1
     ipam:
       driver: default
       config:
         - subnet: 10.0.14.0/24
-  net15:
+  net15: # hb-r3
     ipam:
       driver: default
       config:
         - subnet: 10.0.15.0/24
+  net16_0: # r1-r2
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.0.16.0/30
+  net16_4: # r1-r4
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.0.16.4/30
+  net16_8: # r3-r2
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.0.16.8/30
+  net16_12: # r3-r4
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.0.16.12/30
 
 
 
