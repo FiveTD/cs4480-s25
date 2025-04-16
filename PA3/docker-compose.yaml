@@ -1,12 +1,17 @@
 
 services:
   r1:
-    build: .
+    build:
+      context: ./router
+    container_name: r1
+    hostname: r1
     stdin_open: true
     tty: true
     cap_add:
       - ALL
     privileged: true
+    volumes:
+      - ./configs:/etc/frr/config
     networks:
       net14:
         ipv4_address: 10.0.14.4 # to ha
@@ -16,12 +21,17 @@ services:
         ipv4_address: 10.0.16.10 # to r4
 
   r2:
-    build: .
+    build:
+      context: ./router
+    container_name: r2
+    hostname: r2
     stdin_open: true
     tty: true
     cap_add:
       - ALL
     privileged: true
+    volumes:
+      - ./configs:/etc/frr/config
     networks:
       net16_0:
         ipv4_address: 10.0.16.3 # to r1
@@ -29,12 +39,17 @@ services:
         ipv4_address: 10.0.16.19 # to r3
   
   r3:
-    build: .
+    build:
+      context: ./router
+    container_name: r3
+    hostname: r3
     stdin_open: true
     tty: true
     cap_add:
       - ALL
     privileged: true
+    volumes:
+      - ./configs:/etc/frr/config
     networks:
       net15:
         ipv4_address: 10.0.15.4 # to hb
@@ -44,12 +59,17 @@ services:
         ipv4_address: 10.0.16.26 # to r4
 
   r4:
-    build: .
+    build:
+      context: ./router
+    container_name: r4
+    hostname: r4
     stdin_open: true
     tty: true
     cap_add:
       - ALL
     privileged: true
+    volumes:
+      - ./configs:/etc/frr/config
     networks:
       net16_8:
         ipv4_address: 10.0.16.11 # to r1
@@ -57,7 +77,10 @@ services:
         ipv4_address: 10.0.16.27 # to r3
 
   ha:
-    build: .
+    build:
+      context: ./host
+    container_name: ha
+    hostname: ha
     stdin_open: true
     tty: true
     cap_add:
@@ -68,7 +91,10 @@ services:
         ipv4_address: 10.0.14.3 # to r1
 
   hb:
-    build: .
+    build:
+      context: ./host
+    container_name: hb
+    hostname: hb
     stdin_open: true
     tty: true
     cap_add:
