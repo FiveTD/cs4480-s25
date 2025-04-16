@@ -12,8 +12,8 @@ services:
         ipv4_address: 10.0.14.4 # to ha
       net16_0:
         ipv4_address: 10.0.16.2 # to r2
-      net16_4:
-        ipv4_address: 10.0.16.6 # to r4
+      net16_8:
+        ipv4_address: 10.0.16.10 # to r4
 
   r2:
     build: .
@@ -25,8 +25,8 @@ services:
     networks:
       net16_0:
         ipv4_address: 10.0.16.3 # to r1
-      net16_8:
-        ipv4_address: 10.0.16.11 # to r3
+      net16_16:
+        ipv4_address: 10.0.16.19 # to r3
   
   r3:
     build: .
@@ -38,10 +38,10 @@ services:
     networks:
       net15:
         ipv4_address: 10.0.15.4 # to hb
-      net16_8:
-        ipv4_address: 10.0.16.10 # to r2
-      net16_12:
-        ipv4_address: 10.0.16.14 # to r4
+      net16_16:
+        ipv4_address: 10.0.16.18 # to r2
+      net16_24:
+        ipv4_address: 10.0.16.26 # to r4
 
   r4:
     build: .
@@ -51,10 +51,10 @@ services:
       - ALL
     privileged: true
     networks:
-      net16_4:
-        ipv4_address: 10.0.16.7 # to r1
-      net16_12:
-        ipv4_address: 10.0.16.15 # to r3
+      net16_8:
+        ipv4_address: 10.0.16.11 # to r1
+      net16_24:
+        ipv4_address: 10.0.16.27 # to r3
 
   ha:
     build: .
@@ -93,19 +93,19 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 10.0.16.0/30
-  net16_4: # r1-r4
+        - subnet: 10.0.16.0/29
+  net16_8: # r1-r4
     ipam:
       driver: default
       config:
-        - subnet: 10.0.16.4/30
-  net16_8: # r3-r2
+        - subnet: 10.0.16.8/29
+  net16_16: # r3-r2
     ipam:
       driver: default
       config:
-        - subnet: 10.0.16.8/30
-  net16_12: # r3-r4
+        - subnet: 10.0.16.16/29
+  net16_24: # r3-r4
     ipam:
       driver: default
       config:
-        - subnet: 10.0.16.12/30
+        - subnet: 10.0.16.24/29
