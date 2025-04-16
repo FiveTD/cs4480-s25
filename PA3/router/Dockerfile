@@ -1,10 +1,12 @@
 FROM ubuntu
 
 RUN apt-get update
-RUN apt-get -y install bash iproute2 net-tools tcpdump vim iputils-ping curl gnupg
+RUN apt-get -y install bash iproute2 net-tools tcpdump vim iputils-ping
 RUN apt-get clean
 
 # Install FRR
+RUN apt -y install curl
+RUN apt -y install gnupg
 RUN curl -s https://deb.frrouting.org/frr/keys.gpg | tee /usr/share/keyrings/frrouting.gpg > /dev/null
 RUN apt install lsb-release
 ENV FRRVER="frr-stable"
