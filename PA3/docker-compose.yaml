@@ -11,9 +11,9 @@ services:
       net14:
         ipv4_address: 10.0.14.4 # to ha
       net16_0:
-        ipv4_address: 10.0.16.1 # to r2
+        ipv4_address: 10.0.16.2 # to r2
       net16_4:
-        ipv4_address: 10.0.16.5 # to r4
+        ipv4_address: 10.0.16.6 # to r4
 
   r2:
     build: .
@@ -24,9 +24,9 @@ services:
     privileged: true
     networks:
       net16_0:
-        ipv4_address: 10.0.16.2 # to r1
+        ipv4_address: 10.0.16.3 # to r1
       net16_8:
-        ipv4_address: 10.0.16.10 # to r3
+        ipv4_address: 10.0.16.11 # to r3
   
   r3:
     build: .
@@ -39,9 +39,9 @@ services:
       net15:
         ipv4_address: 10.0.15.4 # to hb
       net16_8:
-        ipv4_address: 10.0.16.9 # to r2
+        ipv4_address: 10.0.16.10 # to r2
       net16_12:
-        ipv4_address: 10.0.16.13 # to r4
+        ipv4_address: 10.0.16.14 # to r4
 
   r4:
     build: .
@@ -52,9 +52,9 @@ services:
     privileged: true
     networks:
       net16_4:
-        ipv4_address: 10.0.16.6 # to r1
+        ipv4_address: 10.0.16.7 # to r1
       net16_12:
-        ipv4_address: 10.0.16.14 # to r3
+        ipv4_address: 10.0.16.15 # to r3
 
   ha:
     build: .
@@ -109,8 +109,3 @@ networks:
       driver: default
       config:
         - subnet: 10.0.16.12/30
-
-
-
-
-
