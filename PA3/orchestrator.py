@@ -53,8 +53,8 @@ def main():
     
     if args.construct: construct_network()
     if args.daemon: start_ospf_daemon()
-    if args.route: print("route")
-    if args.path: print(f"path: {args.path}")
+    if args.route: set_host_routes()
+    if args.path: set_preferred_path(args.path)
 
 if __name__ == '__main__':
     main()
