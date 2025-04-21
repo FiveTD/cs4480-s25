@@ -8,3 +8,4 @@ if [ "$HOSTNAME" = "ha" ]; then
 elif [ "$HOSTNAME" = "hb" ]; then
     ip route replace default via 10.0.15.4
 fi
+ip route flush cache
