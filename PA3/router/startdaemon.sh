@@ -9,4 +9,4 @@ fi
 
 # Start OSPF daemon
 sed -i 's/ospfd=no/ospfd=yes/' /etc/frr/daemons
-service frr restart
+service frr restart || service frr start
