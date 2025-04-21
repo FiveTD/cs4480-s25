@@ -27,22 +27,30 @@ def parse_args() -> argparse.Namespace | None:
 
 def construct_network():
     '''Constructs the network topology using Docker containers.'''
+    print("ORCH: Constructing network")
+    
     os.system('docker compose up -d')
     
 def start_ospf_daemon():
     '''Starts the OSPF daemon and sets configurations for each router.'''
+    print('ORCH: Starting OSPF daemons')
+    
     for i in range(1, 5):
         os.system(f'docker exec -it r{i} ./startdaemon.sh')
         
 def set_host_routes():
     '''Sets routing for attached hosts.'''
+    print('ORCH: Installing host routing')
+    
     for i in 'ab':
         os.system(f'docker exec -it h{i} ./installroute.sh')
         
 def set_preferred_path(path: str):
+    '''Sets the preferred path for network traffic.'''
+    print(f'ORCH: Moving traffic to {path} path')
+    
     if path == 'north': cost = 10
     elif path == 'south': cost = 1
-    
     for i in (1, 3):
         os.system(f'docker exec -it r{i} vtysh -c \'configure terminal\' ' +
                   f'-c \'interface eth2\' -c\'ip ospf cost {cost}\' -c \'end\'')
