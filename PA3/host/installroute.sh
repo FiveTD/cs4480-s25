@@ -1,11 +1,8 @@
 #!/bin/bash
 
 HOSTNAME=$(hostname)
-
-# Configure default route
 if [ "$HOSTNAME" = "ha" ]; then
-    ip route replace default via 10.0.14.4
+    route add -net 10.0.15.0/24 gw 10.0.14.4
 elif [ "$HOSTNAME" = "hb" ]; then
-    ip route replace default via 10.0.15.4
+    route add -net 10.0.14.0/24 gw 10.0.15.4
 fi
-ip route flush cache

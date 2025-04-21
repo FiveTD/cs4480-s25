@@ -5,6 +5,7 @@
 
 import argparse
 import os
+import time
 
 def parse_args() -> argparse.Namespace | None:
     '''Parse command line arguments. If no arguments are provided,
@@ -44,6 +45,8 @@ def set_host_routes():
     
     for i in 'ab':
         os.system(f'docker exec -it h{i} ./installroute.sh')
+        # time.sleep(1)
+        # os.system(f'docker exec -it h{i} ip route') # Only way 
         
 def set_preferred_path(path: str):
     '''Sets the preferred path for network traffic.'''
