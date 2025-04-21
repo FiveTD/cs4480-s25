@@ -31,7 +31,7 @@ def construct_network():
     
 def start_ospf_daemon():
     '''Starts the OSPF daemon and sets configurations for each router.'''
-    for i in range(4):
+    for i in range(1, 5):
         os.system(f'docker exec -it r{i} ./startdaemon.sh')
         
 def set_host_routes():
