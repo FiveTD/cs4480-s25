@@ -4,7 +4,7 @@
 # Written by Tim Lawrence for CS4480, Spring 2025
 
 import argparse
-import os
+import os, subprocess
 import time
 
 def parse_args() -> argparse.Namespace | None:
@@ -45,8 +45,19 @@ def set_host_routes():
     
     for i in 'ab':
         os.system(f'docker exec -it h{i} ./installroute.sh')
-        # time.sleep(1)
-        # os.system(f'docker exec -it h{i} ip route') # Only way 
+    
+    print('ORCH: Waiting for route between hosts', end='')
+    while True:
+        result = subprocess.run(
+            'docker exec -it r1 vtysh -c \'show ip route\'',
+            shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        if '10.0.15.0' in result.stdout:
+            print('.done')
+            break
+        else:
+            print('.', end='')
+            time.sleep(1)
         
 def set_preferred_path(path: str):
     '''Sets the preferred path for network traffic.'''
