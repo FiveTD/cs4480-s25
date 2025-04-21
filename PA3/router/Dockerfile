@@ -14,11 +14,7 @@ ENV FRRVER="frr-stable"
 RUN echo deb '[signed-by=/usr/share/keyrings/frrouting.gpg]' https://deb.frrouting.org/frr $(lsb_release -s -c) $FRRVER | tee -a /etc/apt/sources.list.d/frr.list
 RUN apt update; apt -y install frr frr-pythontools
 
-RUN sed -i 's/ospfd=no/ospfd=yes/' /etc/frr/daemons
-RUN mkdir -p /etc/frr/config
+COPY startdaemon.sh /
+RUN chmod +x /startdaemon.sh
 
-COPY entrypoint.sh /
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT [ "/entrypoint.sh" ]
 CMD ["bash"]
